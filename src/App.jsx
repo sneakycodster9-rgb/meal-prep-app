@@ -142,23 +142,23 @@ function LandingPage({ onEnter }) {
 
 // ── PricingPopup ──────────────────────────────────────────────────────────────
 const PRICING_OPTIONS = [
-  { id: 'basic',    price: '$3/month',  tier: 'Basic' },
-  { id: 'standard', price: '$5/month',  tier: 'Standard', popular: true },
-  { id: 'pro',      price: '$8/month',  tier: 'Pro' },
+  { id: 'standard', price: '$10/month', tier: 'Standard' },
+  { id: 'pro',      price: '$20/month', tier: 'Pro',                popular: true },
+  { id: 'family',   price: '$35/month', tier: 'Family & Household' },
   { id: 'skip',     price: "I wouldn't pay for this", tier: null },
 ]
 
 function PricingPopup({ onClose }) {
   const [chosen, setChosen] = useState(null)
+  const [feedback, setFeedback] = useState('')
 
-  function handleChoice(opt) {
-    if (chosen) return
-    setChosen(opt.id)
-    const label = opt.tier ? `${opt.price} - ${opt.tier}` : opt.price
+  function handleSubmit() {
+    if (!chosen) return
+    const label = chosen.tier ? `${chosen.price} - ${chosen.tier}` : chosen.price
     const log = JSON.parse(localStorage.getItem('prepai_pricing') || '[]')
-    log.push({ choice: opt.id, label, ts: new Date().toISOString() })
+    log.push({ choice: chosen.id, label, feedback: feedback.trim(), ts: new Date().toISOString() })
     localStorage.setItem('prepai_pricing', JSON.stringify(log))
-    setTimeout(onClose, 900)
+    onClose()
   }
 
   return (
@@ -176,12 +176,11 @@ function PricingPopup({ onClose }) {
               key={opt.id}
               className={[
                 'pricing-option',
-                opt.popular  ? 'pricing-option--popular'  : '',
-                !opt.tier    ? 'pricing-option--skip'     : '',
-                chosen === opt.id ? 'pricing-option--chosen' : '',
+                opt.popular       ? 'pricing-option--popular' : '',
+                !opt.tier         ? 'pricing-option--skip'    : '',
+                chosen?.id === opt.id ? 'pricing-option--chosen' : '',
               ].filter(Boolean).join(' ')}
-              onClick={() => handleChoice(opt)}
-              disabled={!!chosen}
+              onClick={() => setChosen(opt)}
             >
               {opt.popular && <span className="pricing-option__badge">Most popular</span>}
               {opt.tier ? (
@@ -192,10 +191,30 @@ function PricingPopup({ onClose }) {
               ) : (
                 <span className="pricing-option__skip-label">{opt.price}</span>
               )}
-              {chosen === opt.id && <span className="pricing-option__check" aria-hidden="true">✓</span>}
+              {chosen?.id === opt.id && <span className="pricing-option__check" aria-hidden="true">✓</span>}
             </button>
           ))}
         </div>
+        <div className="pricing-feedback">
+          <label htmlFor="pricing-ideas" className="pricing-feedback__label">
+            What would make this worth even more to you?
+          </label>
+          <textarea
+            id="pricing-ideas"
+            className="pricing-feedback__input"
+            placeholder="More meal variety, family-size portions, grocery delivery sync…"
+            value={feedback}
+            onChange={e => setFeedback(e.target.value)}
+            rows={3}
+          />
+        </div>
+        <button
+          className="pricing-submit-btn"
+          onClick={handleSubmit}
+          disabled={!chosen}
+        >
+          Send Feedback
+        </button>
       </div>
     </div>
   )
