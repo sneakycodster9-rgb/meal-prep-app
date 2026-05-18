@@ -1108,3 +1108,314 @@ textarea {
 
 .modal-link--google  { background: #4285f4; color: #fff; }
 .modal-link--youtube { background: #ff0000; color: #fff; }
+
+/* ── Landing Page ── */
+.landing {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(150deg, #0f0220 0%, #2d0554 45%, #4a1490 75%, #1a0533 100%);
+  padding: 40px 24px;
+}
+
+.landing__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0;
+  max-width: 480px;
+  width: 100%;
+}
+
+.landing__logo {
+  font-size: 72px;
+  line-height: 1;
+  margin-bottom: 20px;
+  filter: drop-shadow(0 4px 24px rgba(170, 59, 255, 0.6));
+}
+
+.landing__name {
+  font-size: 56px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 16px;
+  letter-spacing: -2px;
+  line-height: 1;
+
+  @media (max-width: 480px) { font-size: 42px; }
+}
+
+.landing__tagline {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.65);
+  margin: 0 0 36px;
+  line-height: 1.5;
+
+  @media (max-width: 480px) { font-size: 16px; }
+}
+
+.landing__cta {
+  background: linear-gradient(135deg, #aa3bff 0%, #7c3aed 100%);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 16px 40px;
+  font-size: 18px;
+  font-weight: 700;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 6px 28px rgba(170, 59, 255, 0.5);
+  letter-spacing: -0.2px;
+  margin-bottom: 44px;
+
+  &:hover {
+    opacity: 0.92;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 36px rgba(170, 59, 255, 0.6);
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+.landing__email-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 32px;
+}
+
+.landing__email-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.landing__email-form {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+
+  @media (max-width: 400px) { flex-direction: column; }
+}
+
+.landing__email-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-family: var(--sans);
+  color: #fff;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+
+  &::placeholder { color: rgba(255, 255, 255, 0.4); }
+  &:focus { border-color: rgba(170, 59, 255, 0.7); background: rgba(255, 255, 255, 0.14); }
+}
+
+.landing__email-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--sans);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  white-space: nowrap;
+
+  &:hover { background: rgba(255, 255, 255, 0.24); border-color: rgba(255, 255, 255, 0.5); }
+}
+
+.landing__email-success {
+  font-size: 15px;
+  font-weight: 600;
+  color: #4ade80;
+  margin: 0;
+}
+
+.landing__no-spam {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+  margin: 0;
+}
+
+/* ── Pricing Popup ── */
+.pricing-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+  backdrop-filter: blur(6px);
+  animation: backdropIn 0.2s ease;
+}
+
+.pricing-modal {
+  background: var(--bg);
+  border-radius: 22px;
+  width: 100%;
+  max-width: 380px;
+  padding: 32px 28px 28px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  position: relative;
+  animation: modalIn 0.22s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.pricing-modal__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: var(--code-bg);
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 13px;
+  transition: background 0.15s;
+
+  &:hover { background: var(--border); }
+}
+
+.pricing-modal__emoji {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.pricing-modal__title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.pricing-modal__subtitle {
+  font-size: 14px;
+  color: var(--text);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.pricing-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.pricing-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  font-family: var(--sans);
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+  position: relative;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent-border);
+    background: var(--accent-bg);
+    transform: translateX(2px);
+  }
+
+  &:disabled { cursor: default; }
+
+  &--popular {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+
+  &--skip {
+    border-style: dashed;
+    opacity: 0.7;
+
+    &:hover:not(:disabled) { opacity: 1; }
+  }
+
+  &--chosen {
+    border-color: #16a34a;
+    background: rgba(34, 197, 94, 0.06);
+    transform: none;
+  }
+}
+
+.pricing-option__badge {
+  position: absolute;
+  top: -9px;
+  left: 14px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.pricing-option__price {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.pricing-option__tier {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--code-bg);
+  border-radius: 5px;
+  padding: 3px 8px;
+  margin-left: auto;
+}
+
+.pricing-option__skip-label {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.pricing-option__check {
+  font-size: 16px;
+  color: #16a34a;
+  font-weight: 700;
+  margin-left: auto;
+  flex-shrink: 0;
+}

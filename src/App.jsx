@@ -90,6 +90,117 @@ function parseRecipe(text) {
   return result
 }
 
+// ── LandingPage ───────────────────────────────────────────────────────────────
+function LandingPage({ onEnter }) {
+  const [email, setEmail] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+
+  function handleEmail(e) {
+    e.preventDefault()
+    const trimmed = email.trim()
+    if (!trimmed) return
+    const list = JSON.parse(localStorage.getItem('prepai_emails') || '[]')
+    list.push({ email: trimmed, ts: new Date().toISOString() })
+    localStorage.setItem('prepai_emails', JSON.stringify(list))
+    setSubmitted(true)
+  }
+
+  return (
+    <div className="landing">
+      <div className="landing__content">
+        <div className="landing__logo">🥗</div>
+        <h1 className="landing__name">PrepAI</h1>
+        <p className="landing__tagline">
+          AI-powered weekly meal plans tailored to your budget &amp; goals — in seconds.
+        </p>
+        <button className="landing__cta" onClick={onEnter}>
+          Try it free →
+        </button>
+        <div className="landing__email-section">
+          <p className="landing__email-label">Get early access when we launch</p>
+          {submitted ? (
+            <p className="landing__email-success">✓ You're on the list!</p>
+          ) : (
+            <form className="landing__email-form" onSubmit={handleEmail}>
+              <input
+                type="email"
+                className="landing__email-input"
+                placeholder="your@email.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+              <button type="submit" className="landing__email-btn">Notify me</button>
+            </form>
+          )}
+          <p className="landing__no-spam">No spam, ever. Unsubscribe anytime.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── PricingPopup ──────────────────────────────────────────────────────────────
+const PRICING_OPTIONS = [
+  { id: 'basic',    price: '$3/month',  tier: 'Basic' },
+  { id: 'standard', price: '$5/month',  tier: 'Standard', popular: true },
+  { id: 'pro',      price: '$8/month',  tier: 'Pro' },
+  { id: 'skip',     price: "I wouldn't pay for this", tier: null },
+]
+
+function PricingPopup({ onClose }) {
+  const [chosen, setChosen] = useState(null)
+
+  function handleChoice(opt) {
+    if (chosen) return
+    setChosen(opt.id)
+    const label = opt.tier ? `${opt.price} - ${opt.tier}` : opt.price
+    const log = JSON.parse(localStorage.getItem('prepai_pricing') || '[]')
+    log.push({ choice: opt.id, label, ts: new Date().toISOString() })
+    localStorage.setItem('prepai_pricing', JSON.stringify(log))
+    setTimeout(onClose, 900)
+  }
+
+  return (
+    <div className="pricing-backdrop" onMouseDown={onClose}>
+      <div className="pricing-modal" onMouseDown={e => e.stopPropagation()}>
+        <button className="pricing-modal__close" onClick={onClose} aria-label="Close">✕</button>
+        <div className="pricing-modal__emoji">🎉</div>
+        <h2 className="pricing-modal__title">Enjoying PrepAI?</h2>
+        <p className="pricing-modal__subtitle">
+          We're building the full version. Tell us what you'd pay:
+        </p>
+        <div className="pricing-options">
+          {PRICING_OPTIONS.map(opt => (
+            <button
+              key={opt.id}
+              className={[
+                'pricing-option',
+                opt.popular  ? 'pricing-option--popular'  : '',
+                !opt.tier    ? 'pricing-option--skip'     : '',
+                chosen === opt.id ? 'pricing-option--chosen' : '',
+              ].filter(Boolean).join(' ')}
+              onClick={() => handleChoice(opt)}
+              disabled={!!chosen}
+            >
+              {opt.popular && <span className="pricing-option__badge">Most popular</span>}
+              {opt.tier ? (
+                <>
+                  <span className="pricing-option__price">{opt.price}</span>
+                  <span className="pricing-option__tier">{opt.tier}</span>
+                </>
+              ) : (
+                <span className="pricing-option__skip-label">{opt.price}</span>
+              )}
+              {chosen === opt.id && <span className="pricing-option__check" aria-hidden="true">✓</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── ProfilePanel ──────────────────────────────────────────────────────────────
 function ProfilePanel({ profile, onSave, onClose }) {
   const [draft, setDraft] = useState(profile)
@@ -410,6 +521,10 @@ export default function App() {
 
   const [recipe, setRecipe] = useState(null)
 
+  const [showLanding, setShowLanding] = useState(true)
+  const [showPricing, setShowPricing] = useState(false)
+  const [pricingShown, setPricingShown] = useState(false)
+
   function handleProfileSave(saved) {
     setProfile(saved)
     const parts = [saved.restrictions, saved.cuisines].filter(Boolean)
@@ -568,6 +683,7 @@ Mark pantry items with ✓. Keep instructions clear and practical.`
     setError(''); setLoading(true); setMealPlan(null); setGroceryList([])
     setActiveDay(0); setSwapHistory({}); setSwappedDays(new Set())
     setSwapKeys({}); setNewIngredients(new Set()); setRecipe(null)
+    let succeeded = false
 
     const forName = profile.name ? `for ${profile.name} ` : ''
     const prompt = `You are a professional nutritionist. Create a practical 5-day meal plan (Monday–Friday) ${forName}for:
@@ -648,15 +764,24 @@ Keep meals practical, budget-friendly, and aligned with the dietary goals. Use p
         }
       }
       setActiveDay(-1)
+      succeeded = true
     } catch (err) {
       const msg = err?.message ?? String(err)
       setError(msg.includes('401') || msg.toLowerCase().includes('api key')
         ? 'Invalid API key — check VITE_ANTHROPIC_KEY in your .env file.'
         : `Error: ${msg}`)
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+      if (succeeded && !pricingShown) {
+        setShowPricing(true)
+        setPricingShown(true)
+      }
+    }
   }
 
   const hasResults = mealPlan && Object.values(mealPlan).some(Boolean)
+
+  if (showLanding) return <LandingPage onEnter={() => setShowLanding(false)} />
 
   return (
     <div className="app">
@@ -759,6 +884,7 @@ Keep meals practical, budget-friendly, and aligned with the dietary goals. Use p
       </main>
 
       {recipe && <RecipeModal recipe={recipe} onClose={() => setRecipe(null)} />}
+      {showPricing && <PricingPopup onClose={() => setShowPricing(false)} />}
     </div>
   )
 }
