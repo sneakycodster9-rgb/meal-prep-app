@@ -10,6 +10,19 @@ const client = new Anthropic({
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 const DEFAULT_PROFILE = { name: '', restrictions: '', cuisines: '' }
 
+const AMAZON_AFFILIATE_TAG  = 'crydalch7-20'
+const WALMART_AFFILIATE_TAG = '' // add Walmart affiliate tag here when ready
+
+function amazonUrl(query) {
+  const base = `https://www.amazon.com/s?k=${encodeURIComponent(query)}`
+  return AMAZON_AFFILIATE_TAG ? `${base}&tag=${AMAZON_AFFILIATE_TAG}` : base
+}
+
+function walmartUrl(query) {
+  const base = `https://www.walmart.com/search?q=${encodeURIComponent(query)}`
+  return WALMART_AFFILIATE_TAG ? `${base}&affiliates=${WALMART_AFFILIATE_TAG}` : base
+}
+
 const MEAL_META = {
   breakfast: { icon: '☀️', label: 'Breakfast' },
   lunch:     { icon: '🍴', label: 'Lunch' },
@@ -355,9 +368,9 @@ function GrocerySection({ items, newIngredients, onExport }) {
               {isNew && <span className="new-badge">new</span>}
               <span className="grocery-item__name">{item}</span>
               <div className="grocery-item__links">
-                <a href={`https://www.walmart.com/search?q=${encodeURIComponent(item)}`}
+                <a href={walmartUrl(item)}
                   target="_blank" rel="noopener noreferrer" className="shop-link shop-link--walmart">Walmart</a>
-                <a href={`https://www.amazon.com/s?k=${encodeURIComponent(item)}`}
+                <a href={amazonUrl(item)}
                   target="_blank" rel="noopener noreferrer" className="shop-link shop-link--amazon">Amazon</a>
               </div>
             </li>
