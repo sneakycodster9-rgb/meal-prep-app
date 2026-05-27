@@ -1,21 +1,24 @@
 import Stripe from 'stripe'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
-
 const PRICE_ID = 'price_1Tbmfb2KivRS925TFrkDXZQ1'
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
-
-  const { email, userId } = req.body
-
-  if (!email) {
-    return res.status(400).json({ error: 'Email is required' })
-  }
+  console.log('Stripe key exists:', !!process.env.STRIPE_SECRET_KEY)
+  console.log('Price ID:', process.env.STRIPE_PRICE_ID)
 
   try {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' })
+    }
+
+    const { email, userId } = req.body
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' })
+    }
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       customer_email: email,
@@ -28,7 +31,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ url: session.url })
   } catch (err) {
-    console.error('Stripe checkout error:', err.message)
-    res.status(500).json({ error: err.message })
+    console.error('Stripe checkout error:', err)
+    res.status(500).json({ error: err.message, type: err.type, code: err.code })
   }
 }
