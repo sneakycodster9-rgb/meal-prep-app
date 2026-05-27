@@ -150,7 +150,7 @@ function parseRecipe(text) {
 const AUTH_ERROR_MAP = {
   'Invalid login credentials':                   'Incorrect email or password.',
   'User already registered':                     'An account with this email already exists. Try signing in.',
-  'Password should be at least 6 characters':    'Password must be at least 6 characters.',
+  'Password should be at least 6 characters':    'Password must be at least 8 characters.',
   'Email not confirmed':                         'Check your inbox to confirm your email, then sign in.',
   'Unable to validate email address':            'Please enter a valid email address.',
 }
@@ -162,14 +162,61 @@ function friendlyAuthError(msg) {
   return msg
 }
 
+const AVATAR_PALETTE = ['#7c3aed','#059669','#0284c7','#dc2626','#d97706','#be185d']
+function avatarColor(str) {
+  let h = 0
+  for (const c of (str || '')) h = c.charCodeAt(0) + ((h << 5) - h)
+  return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length]
+}
+
+function getDisplayName(user, profile) {
+  return (
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    profile?.name ||
+    user?.email?.split('@')[0] ||
+    'Account'
+  )
+}
+
+function getFirstName(displayName) {
+  return displayName.split(' ')[0]
+}
+
 // ── AuthModal ─────────────────────────────────────────────────────────────────
 function AuthModal({ initialMode = 'login', prompt = '', onClose, onSuccess }) {
   const [mode, setMode] = useState(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  // true = email signup verification; 'forgot' = reset sent
+  const [emailSent, setEmailSent] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+
+  async function handleGoogleSignIn() {
+    setGoogleLoading(true)
+    setError('')
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin },
+      })
+      // Browser will redirect away — no further state updates needed
+    } catch (err) {
+      setError(err.message)
+      setGoogleLoading(false)
+    }
+  }
+
+  const pwReqs = [
+    { label: 'At least 8 characters', met: password.length >= 8 },
+    { label: 'One number',            met: /\d/.test(password) },
+    { label: 'One special character', met: /[^a-zA-Z0-9]/.test(password) },
+  ]
+  const pwValid = mode === 'login' || pwReqs.every(r => r.met)
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -177,90 +224,203 @@ function AuthModal({ initialMode = 'login', prompt = '', onClose, onSuccess }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  function switchMode(next) {
-    setMode(next)
-    setError('')
-    setNotice('')
+  function switchMode(m) {
+    setMode(m); setError(''); setPassword(''); setShowPw(false)
+  }
+
+  async function handleForgotPassword() {
+    if (!email.trim()) { setError('Enter your email address first.'); return }
+    setLoading(true); setError('')
+    try {
+      await supabase.auth.resetPasswordForEmail(email.trim())
+      setEmailSent('forgot')
+    } catch (err) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  async function handleResend() {
+    setResending(true)
+    try { await supabase.auth.resend({ type: 'signup', email }) } catch {}
+    setResending(false)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    setLoading(true)
-    setError('')
-    setNotice('')
+    if (!pwValid) return
+    setLoading(true); setError('')
     try {
       if (mode === 'signup') {
         const { data, error: authErr } = await supabase.auth.signUp({ email, password })
         if (authErr) throw authErr
-        // create user record; ignore errors (table may have RLS or not exist yet)
         if (data.user) {
-          await supabase.from('users').upsert({
-            id: data.user.id,
-            email: data.user.email,
-            tier: 'free',
-          }).then(() => {}) // fire-and-forget
+          await supabase.from('users').upsert({ id: data.user.id, email: data.user.email, tier: 'free' }).then(() => {})
         }
-        // if email confirmation is required the session is null
-        if (!data.session) {
-          setNotice('Check your inbox to confirm your email, then sign in.')
-          setLoading(false)
-          return
-        }
+        if (!data.session) { setEmailSent(true); setLoading(false); return }
         onSuccess(data.user, 'free')
       } else {
         const { data, error: authErr } = await supabase.auth.signInWithPassword({ email, password })
         if (authErr) throw authErr
-        const { data: row } = await supabase
-          .from('users').select('tier').eq('id', data.user.id).single()
+        const { data: row } = await supabase.from('users').select('tier').eq('id', data.user.id).single()
         onSuccess(data.user, row?.tier || 'free')
       }
     } catch (err) {
       setError(friendlyAuthError(err.message))
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
+  const Brand = () => (
+    <div className="auth-card__brand">
+      <span className="auth-card__logo">🥗</span>
+      <span className="auth-card__name">PrepAI</span>
+    </div>
+  )
+
+  const Footer = () => (
+    <p className="auth-card__footer">
+      🔒 Secured by Supabase ·{' '}
+      <a href="#" className="auth-footer-link">Privacy Policy</a>
+      {' · '}
+      <a href="#" className="auth-footer-link">Terms of Service</a>
+    </p>
+  )
+
+  // ── Email verification screen ──
+  if (emailSent === true) {
+    return (
+      <div className="modal-backdrop" onMouseDown={onClose}>
+        <div className="auth-card" onMouseDown={e => e.stopPropagation()}>
+          <Brand />
+          <div className="auth-verify">
+            <div className="auth-verify__icon">✉️</div>
+            <h2 className="auth-verify__title">Check your email</h2>
+            <p className="auth-verify__body">We sent a verification link to<br /><strong>{email}</strong></p>
+            <p className="auth-verify__hint">Click the link to activate your account</p>
+            <button className="auth-resend-btn" onClick={handleResend} disabled={resending}>
+              {resending ? 'Sending…' : 'Resend email'}
+            </button>
+            <button className="auth-back-btn" onClick={() => { setEmailSent(false); switchMode('login') }}>
+              ← Back to Sign In
+            </button>
+          </div>
+          <Footer />
+        </div>
+      </div>
+    )
+  }
+
+  // ── Password reset sent screen ──
+  if (emailSent === 'forgot') {
+    return (
+      <div className="modal-backdrop" onMouseDown={onClose}>
+        <div className="auth-card" onMouseDown={e => e.stopPropagation()}>
+          <Brand />
+          <div className="auth-verify">
+            <div className="auth-verify__icon">📬</div>
+            <h2 className="auth-verify__title">Reset link sent</h2>
+            <p className="auth-verify__body">Check your inbox at<br /><strong>{email}</strong></p>
+            <button className="auth-back-btn" onClick={() => { setEmailSent(false); setError('') }}>
+              ← Back to Sign In
+            </button>
+          </div>
+          <Footer />
+        </div>
+      </div>
+    )
+  }
+
+  // ── Main auth form ──
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
-      <div className="modal auth-modal" onMouseDown={e => e.stopPropagation()}>
-        <div className="modal__header">
-          <div>
-            <span className="modal__eyebrow">{mode === 'login' ? 'Welcome back' : 'Create account'}</span>
-            <h2 className="modal__title">{mode === 'login' ? 'Sign In' : 'Sign Up'}</h2>
+      <div className="auth-card" onMouseDown={e => e.stopPropagation()}>
+        <Brand />
+        <h2 className="auth-card__heading">{mode === 'login' ? 'Sign In' : 'Create Account'}</h2>
+
+        {prompt && <p className="auth-gate-banner">{prompt}</p>}
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          <div className="auth-field">
+            <label className="auth-field__label" htmlFor="auth-email">Email</label>
+            <input className="auth-field__input" id="auth-email" type="email"
+              placeholder="you@example.com" value={email}
+              onChange={e => setEmail(e.target.value)} required autoFocus />
           </div>
-          <button className="modal__close" onClick={onClose} aria-label="Close">✕</button>
-        </div>
-        <div className="modal__body">
-          {prompt && <p className="auth-gate-banner">{prompt}</p>}
-          <form onSubmit={handleSubmit} className="auth-form">
-            <div className="form-group">
-              <label htmlFor="auth-email"><span className="label-icon">✉️</span> Email</label>
-              <input id="auth-email" type="email" placeholder="you@example.com"
-                value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
+
+          <div className="auth-field">
+            <div className="auth-field__label-row">
+              <label className="auth-field__label" htmlFor="auth-password">Password</label>
+              {mode === 'login' && (
+                <button type="button" className="auth-forgot" onClick={handleForgotPassword} disabled={loading}>
+                  Forgot password?
+                </button>
+              )}
             </div>
-            <div className="form-group">
-              <label htmlFor="auth-password"><span className="label-icon">🔒</span> Password</label>
-              <input id="auth-password" type="password"
-                placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
-                value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
+            <div className="auth-pw-wrap">
+              <input className="auth-field__input" id="auth-password"
+                type={showPw ? 'text' : 'password'}
+                placeholder={mode === 'signup' ? 'Create a strong password' : '••••••••'}
+                value={password} onChange={e => setPassword(e.target.value)} required />
+              <button type="button" className="auth-pw-eye"
+                onClick={() => setShowPw(v => !v)}
+                aria-label={showPw ? 'Hide password' : 'Show password'}>
+                {showPw
+                  ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                }
+              </button>
             </div>
-            {error  && <p className="error-banner">{error}</p>}
-            {notice && <p className="auth-notice">{notice}</p>}
-            <button type="submit" className="generate-btn" style={{ marginTop: 0 }} disabled={loading}>
-              {loading
-                ? <><span className="spinner" aria-hidden="true" /> {mode === 'login' ? 'Signing in…' : 'Creating account…'}</>
-                : mode === 'login' ? 'Sign In' : 'Create Account'}
-            </button>
-          </form>
-          <p className="auth-toggle">
-            {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-            <button type="button" className="auth-toggle__btn"
-              onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}>
-              {mode === 'login' ? 'Sign up free' : 'Sign in'}
-            </button>
-          </p>
-        </div>
+          </div>
+
+          {mode === 'signup' && password.length > 0 && (
+            <ul className="pw-reqs">
+              {pwReqs.map((r, i) => (
+                <li key={i} className={`pw-req${r.met ? ' pw-req--met' : ''}`}>
+                  <span className="pw-req__icon">{r.met ? '✓' : '○'}</span>
+                  {r.label}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {error && <p className="auth-error">{error}</p>}
+
+          <button type="submit" className="auth-primary-btn" disabled={loading || !pwValid}>
+            {loading
+              ? <><span className="spinner" aria-hidden="true" /> {mode === 'login' ? 'Signing in…' : 'Creating account…'}</>
+              : mode === 'login' ? 'Sign In' : 'Create Account'}
+          </button>
+
+          {mode === 'signup' && (
+            <p className="auth-trust-line">🔒 Your data is encrypted and never sold to third parties</p>
+          )}
+        </form>
+
+        <div className="auth-divider"><span>or</span></div>
+
+        <button type="button" className="auth-google-btn"
+          onClick={handleGoogleSignIn} disabled={googleLoading || loading}>
+          {googleLoading
+            ? <span className="spinner" style={{ borderTopColor: '#4285F4', borderColor: 'rgba(66,133,244,0.3)' }} aria-hidden="true" />
+            : (
+              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+            )
+          }
+          {googleLoading ? 'Redirecting…' : 'Continue with Google'}
+        </button>
+
+        <p className="auth-switch">
+          {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+          <button type="button" className="auth-switch__btn"
+            onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}>
+            {mode === 'login' ? 'Sign up free' : 'Sign in'}
+          </button>
+        </p>
+
+        <Footer />
       </div>
     </div>
   )
@@ -280,6 +440,66 @@ function LandingPage({ onEnter }) {
           Try it free →
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── ProfileDropdown ───────────────────────────────────────────────────────────
+function ProfileDropdown({ user, userTier, profile, onClose, onSettings, onLogout, onUpgrade }) {
+  const ref = useRef(null)
+  const displayName = getDisplayName(user, profile)
+  const initial = displayName.charAt(0).toUpperCase()
+  const color = avatarColor(user.email || displayName)
+
+  useEffect(() => {
+    function onOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) onClose()
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [onClose])
+
+  return (
+    <div ref={ref} className="profile-dropdown">
+      <div className="profile-dropdown__user">
+        <div className="profile-dropdown__avatar" style={{ background: color }}>{initial}</div>
+        <div className="profile-dropdown__user-info">
+          <p className="profile-dropdown__display">{displayName}</p>
+          <p className="profile-dropdown__email">
+            {user.email}
+            <span className="profile-dropdown__verified" title="Verified">✓</span>
+          </p>
+        </div>
+      </div>
+
+      <div className="profile-dropdown__plan-row">
+        <span className={`plan-badge plan-badge--${userTier === 'pro' ? 'pro' : 'free'}`}>
+          {userTier === 'pro' ? '⭐ Pro' : '✦ Free'}
+        </span>
+        <span className="profile-dropdown__version">v1.0</span>
+      </div>
+
+      {userTier !== 'pro' && (
+        <button className="profile-dropdown__upgrade" onClick={onUpgrade}>
+          ⭐ Upgrade to Pro
+        </button>
+      )}
+
+      <div className="profile-dropdown__sep" />
+
+      <button className="profile-dropdown__item" onClick={onSettings}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+        Account Settings
+      </button>
+
+      <div className="profile-dropdown__sep" />
+
+      <button className="profile-dropdown__item profile-dropdown__item--signout" onClick={onLogout}>
+        Sign Out
+      </button>
     </div>
   )
 }
@@ -707,6 +927,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [profile, setProfile] = useState(loadProfile)
   const [showProfile, setShowProfile] = useState(false)
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false)
 
   const fileInputRef = useRef(null)
   const [scanningPhoto, setScanningPhoto] = useState(false)
@@ -740,19 +961,31 @@ export default function App() {
 
   // Restore session on mount and keep auth state in sync
   useEffect(() => {
-    async function init() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        setUser(session.user)
-        const { data: row } = await supabase
-          .from('users').select('tier').eq('id', session.user.id).single()
-        setUserTier(row?.tier || 'free')
-      }
+    // Shared helper: set user state + ensure a users-table row exists (covers Google OAuth)
+    async function applySession(authUser) {
+      setUser(authUser)
+      // Insert a row if one doesn't exist yet; ignoreDuplicates preserves existing tier
+      await supabase.from('users').upsert(
+        { id: authUser.id, email: authUser.email, tier: 'free' },
+        { onConflict: 'id', ignoreDuplicates: true }
+      ).then(() => {})
+      const { data: row } = await supabase
+        .from('users').select('tier').eq('id', authUser.id).single()
+      setUserTier(row?.tier || 'free')
     }
-    init()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session?.user) { setUser(null); setUserTier(null) }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) applySession(session.user)
     })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session?.user) {
+        setUser(null); setUserTier(null)
+      } else if (event === 'SIGNED_IN') {
+        applySession(session.user)
+      }
+    })
+
     return () => subscription.unsubscribe()
   }, [])
 
@@ -765,9 +998,56 @@ export default function App() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
+    localStorage.clear()
+
+    // Reset every piece of app state so the next visitor starts fresh
     setUser(null)
     setUserTier(null)
     setFreeGenerationsUsed(0)
+    setShowProfileDropdown(false)
+    setShowProfile(false)
+    setProfile(DEFAULT_PROFILE)
+    setBudget('')
+    setGoals('')
+    setPantryItems([])
+    setAddItemInput('')
+    setSelectedPresets(new Set())
+    setMealPlan(null)
+    setGroceryList([])
+    setGroceryByDay({})
+    setNewIngredients(new Set())
+    setSwapHistory({})
+    setSwappedDays(new Set())
+    setSwapKeys({})
+    setSwappingDay(null)
+    setRecipe(null)
+    setError('')
+    setRetryStatus('')
+    setLoading(false)
+    setActiveDay(-1)
+    setScanningPhoto(false)
+    setScanError('')
+    setScannedCount(0)
+
+    // Return to the landing page
+    setShowLanding(true)
+  }
+
+  async function handleUpgrade() {
+    if (!user) return
+    setShowProfileDropdown(false)
+    try {
+      const res = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, userId: user.id }),
+      })
+      const { url, error } = await res.json()
+      if (error) throw new Error(error)
+      window.location.href = url
+    } catch (err) {
+      console.error('Upgrade error:', err.message)
+    }
   }
 
   function openAuthModal(mode, prompt = '') {
@@ -1102,21 +1382,31 @@ Keep meals practical, budget-friendly, and aligned with the dietary goals. Use p
               <p className="app-header__subtitle">AI-powered weekly meal plans tailored to your budget &amp; goals</p>
             </div>
           </div>
-          <div className="app-header__right">
-            <button
-              className={`profile-toggle-btn${showProfile ? ' profile-toggle-btn--active' : ''}`}
-              onClick={() => setShowProfile(v => !v)}
-            >
-              👤 {profile.name || 'My Profile'}
-            </button>
+          <div className="app-header__right" style={{ position: 'relative' }}>
             {user ? (
-              <div className="header-auth">
-                <span className="header-auth__email" title={user.email}>{user.email}</span>
-                {userTier && userTier !== 'free' && (
-                  <span className="header-auth__tier">{userTier}</span>
+              <>
+                <button
+                  className={`profile-toggle-btn${showProfileDropdown ? ' profile-toggle-btn--active' : ''}`}
+                  onClick={() => setShowProfileDropdown(v => !v)}
+                >
+                  <span className="profile-btn__avatar"
+                    style={{ background: avatarColor(user.email || '') }}>
+                    {getDisplayName(user, profile).charAt(0).toUpperCase()}
+                  </span>
+                  {getFirstName(getDisplayName(user, profile))}
+                </button>
+                {showProfileDropdown && (
+                  <ProfileDropdown
+                    user={user}
+                    userTier={userTier}
+                    profile={profile}
+                    onClose={() => setShowProfileDropdown(false)}
+                    onSettings={() => { setShowProfileDropdown(false); setShowProfile(true) }}
+                    onLogout={handleLogout}
+                    onUpgrade={handleUpgrade}
+                  />
                 )}
-                <button className="header-auth__signout" onClick={handleLogout}>Sign out</button>
-              </div>
+              </>
             ) : (
               <button className="header-auth__signin" onClick={() => openAuthModal('login')}>
                 Sign In
