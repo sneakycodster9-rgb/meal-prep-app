@@ -9,7 +9,23 @@ const client = new Anthropic({
 })
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+const ALL_WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const DEFAULT_PROFILE = { name: '', restrictions: '', cuisines: '' }
+
+function getActiveDays(planDays, startDay) {
+  const startIdx = ALL_WEEK_DAYS.indexOf(startDay)
+  return Array.from({ length: planDays }, (_, i) => ALL_WEEK_DAYS[(startIdx + i) % 7])
+}
+
+function getMealsList(mealTypes, customMeals) {
+  switch (mealTypes) {
+    case 'breakfast': return ['breakfast']
+    case 'lunch':     return ['lunch']
+    case 'dinner':    return ['dinner']
+    case 'custom':    return ['breakfast', 'lunch', 'dinner'].filter(m => customMeals.has(m))
+    default:          return ['breakfast', 'lunch', 'dinner']
+  }
+}
 
 const AMAZON_AFFILIATE_TAG  = 'crydalch7-20'
 const WALMART_AFFILIATE_TAG = '' // add Walmart affiliate tag here when ready
@@ -183,6 +199,24 @@ function getFirstName(displayName) {
   return displayName.split(' ')[0]
 }
 
+// ── Scarcity / testimonial constants ─────────────────────────────────────────
+const COUNTDOWN_TARGET = new Date('2026-06-30T23:59:59').getTime()
+
+function getCountdown() {
+  const diff = Math.max(0, COUNTDOWN_TARGET - Date.now())
+  return {
+    days:  Math.floor(diff / 86400000),
+    hours: Math.floor((diff % 86400000) / 3600000),
+    mins:  Math.floor((diff % 3600000)  / 60000),
+    secs:  Math.floor((diff % 60000)    / 1000),
+  }
+}
+
+const TESTIMONIALS = [
+  { text: 'Cut my grocery bill by $180 in the first month', author: 'Jane R.' },
+  { text: 'Finally stopped wasting food. The pantry scanner is a game changer', author: 'Marcus T.' },
+]
+
 // ── AuthModal ─────────────────────────────────────────────────────────────────
 function AuthModal({ initialMode = 'login', prompt = '', onClose, onSuccess }) {
   const [mode, setMode] = useState(initialMode)
@@ -195,6 +229,18 @@ function AuthModal({ initialMode = 'login', prompt = '', onClose, onSuccess }) {
   const [emailSent, setEmailSent] = useState(false)
   const [resending, setResending] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [countdown, setCountdown] = useState(getCountdown)
+  const [testimonialIdx, setTestimonialIdx] = useState(0)
+
+  useEffect(() => {
+    const t = setInterval(() => setCountdown(getCountdown()), 1000)
+    return () => clearInterval(t)
+  }, [])
+
+  useEffect(() => {
+    const t = setInterval(() => setTestimonialIdx(i => (i + 1) % TESTIMONIALS.length), 4500)
+    return () => clearInterval(t)
+  }, [])
 
   async function handleGoogleSignIn() {
     setGoogleLoading(true)
@@ -271,7 +317,7 @@ function AuthModal({ initialMode = 'login', prompt = '', onClose, onSuccess }) {
   const Brand = () => (
     <div className="auth-card__brand">
       <span className="auth-card__logo">🥗</span>
-      <span className="auth-card__name">PrepAI</span>
+      <span className="auth-card__name">SMRT Meals</span>
     </div>
   )
 
@@ -328,14 +374,51 @@ function AuthModal({ initialMode = 'login', prompt = '', onClose, onSuccess }) {
     )
   }
 
+  const pad = n => String(n).padStart(2, '0')
+
   // ── Main auth form ──
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="auth-card" onMouseDown={e => e.stopPropagation()}>
+        <div className="auth-scarcity">
+          <span className="auth-scarcity__badge">🔥 Founding Member Pricing</span>
+          <p className="auth-scarcity__text">Lock in $9.99/month before we raise prices on June 30th</p>
+          <div className="auth-countdown">
+            <div className="countdown-unit">
+              <span className="countdown-unit__num">{pad(countdown.days)}</span>
+              <span className="countdown-unit__label">days</span>
+            </div>
+            <span className="countdown-sep">:</span>
+            <div className="countdown-unit">
+              <span className="countdown-unit__num">{pad(countdown.hours)}</span>
+              <span className="countdown-unit__label">hrs</span>
+            </div>
+            <span className="countdown-sep">:</span>
+            <div className="countdown-unit">
+              <span className="countdown-unit__num">{pad(countdown.mins)}</span>
+              <span className="countdown-unit__label">min</span>
+            </div>
+            <span className="countdown-sep">:</span>
+            <div className="countdown-unit">
+              <span className="countdown-unit__num">{pad(countdown.secs)}</span>
+              <span className="countdown-unit__label">sec</span>
+            </div>
+          </div>
+        </div>
+
         <Brand />
         <h2 className="auth-card__heading">{mode === 'login' ? 'Sign In' : 'Create Account'}</h2>
 
         {prompt && <p className="auth-gate-banner">{prompt}</p>}
+
+        <div className="auth-testimonial" key={testimonialIdx}>
+          <div className="auth-testimonial__stars">⭐⭐⭐⭐⭐</div>
+          <p className="auth-testimonial__text">"{TESTIMONIALS[testimonialIdx].text}"</p>
+          <div className="auth-testimonial__author">
+            — {TESTIMONIALS[testimonialIdx].author}
+            <span className="auth-testimonial__verified">✓ verified</span>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="auth-field">
@@ -432,9 +515,9 @@ function LandingPage({ onEnter }) {
     <div className="landing">
       <div className="landing__content">
         <div className="landing__logo">🥗</div>
-        <h1 className="landing__name">PrepAI</h1>
+        <h1 className="landing__name">SMRT Meals</h1>
         <p className="landing__tagline">
-          AI meal planning that works with what you already have.
+          Eat smart. Spend smart. Live smart.
         </p>
         <button className="landing__cta" onClick={onEnter}>
           Try it free →
@@ -621,9 +704,10 @@ function RecipeModal({ recipe, onClose }) {
 }
 
 // ── MealSection (one meal row inside a card) ──────────────────────────────────
-function MealSection({ type, name, day, onGetRecipe, onSwap, anySwapping, isOpen, onToggle }) {
+function MealSection({ type, name, day, onGetRecipe, onSwap, anySwapping, isOpen, onToggle, userTier, onProAction }) {
   const { icon, label } = MEAL_META[type]
-  const hasName    = Boolean(name)
+  const hasName = Boolean(name)
+  const isPro   = userTier === 'pro'
   const googleUrl  = `https://www.google.com/search?q=recipe+for+${encodeURIComponent(name || '')}`
   const youtubeUrl = `https://www.youtube.com/results?search_query=how+to+make+${encodeURIComponent(name || '')}`
 
@@ -636,9 +720,15 @@ function MealSection({ type, name, day, onGetRecipe, onSwap, anySwapping, isOpen
       <p className="meal-section__name">{name || '—'}</p>
       {hasName && (
         <div className="meal-section__actions">
-          <button className="recipe-btn" onClick={() => onGetRecipe(name)}>
-            📋 Get Recipe
-          </button>
+          {isPro ? (
+            <button className="recipe-btn" onClick={() => onGetRecipe(name)}>
+              📋 Get Recipe
+            </button>
+          ) : (
+            <button className="recipe-btn recipe-btn--locked" onClick={onProAction}>
+              🔒 Get Recipe · Pro
+            </button>
+          )}
           <div className="meal-dropdown">
             <button
               className="meal-menu-btn"
@@ -650,9 +740,15 @@ function MealSection({ type, name, day, onGetRecipe, onSwap, anySwapping, isOpen
             </button>
             {isOpen && (
               <div className="meal-dropdown__menu">
-                <button className="dropdown-item" onClick={() => { onGetRecipe(name); onToggle() }}>
-                  📋 Get Recipe
-                </button>
+                {isPro ? (
+                  <button className="dropdown-item" onClick={() => { onGetRecipe(name); onToggle() }}>
+                    📋 Get Recipe
+                  </button>
+                ) : (
+                  <button className="dropdown-item dropdown-item--locked" onClick={() => { onProAction(); onToggle() }}>
+                    🔒 Get Recipe · Pro
+                  </button>
+                )}
                 <a className="dropdown-item" href={googleUrl}
                   target="_blank" rel="noopener noreferrer" onClick={onToggle}>
                   🔍 Find on Google
@@ -661,13 +757,22 @@ function MealSection({ type, name, day, onGetRecipe, onSwap, anySwapping, isOpen
                   target="_blank" rel="noopener noreferrer" onClick={onToggle}>
                   ▶ Find on YouTube
                 </a>
-                <button
-                  className="dropdown-item dropdown-item--swap"
-                  onClick={() => { onSwap(day); onToggle() }}
-                  disabled={anySwapping}
-                >
-                  ⇄ Swap this day
-                </button>
+                {isPro ? (
+                  <button
+                    className="dropdown-item dropdown-item--swap"
+                    onClick={() => { onSwap(day); onToggle() }}
+                    disabled={anySwapping}
+                  >
+                    ⇄ Swap this day
+                  </button>
+                ) : (
+                  <button
+                    className="dropdown-item dropdown-item--swap dropdown-item--locked"
+                    onClick={() => { onProAction(); onToggle() }}
+                  >
+                    🔒 Swap this day · Pro
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -678,10 +783,10 @@ function MealSection({ type, name, day, onGetRecipe, onSwap, anySwapping, isOpen
 }
 
 // ── MealCard ──────────────────────────────────────────────────────────────────
-function MealCard({ day, content, isLoading, isSwapping, isSwapped, anySwapping, swapKey, onSwap, onUndo, onGetRecipe }) {
+function MealCard({ day, content, isLoading, isSwapping, isSwapped, anySwapping, swapKey, onSwap, onUndo, onGetRecipe, meals = ['breakfast', 'lunch', 'dinner'], userTier, onProAction }) {
   const [openDropdown, setOpenDropdown] = useState(null)
   const cardRef = useRef(null)
-  const meals = parseMealContent(content || '')
+  const parsedMeals = parseMealContent(content || '')
   const showSkeleton = isSwapping || isLoading || !content
 
   useEffect(() => {
@@ -708,14 +813,24 @@ function MealCard({ day, content, isLoading, isSwapping, isSwapped, anySwapping,
             <button className="undo-btn" onClick={() => onUndo(day)}>↩ undo</button>
           )}
           {content && !isLoading && (
-            <button
-              className={`swap-btn${isSwapping ? ' swap-btn--spinning' : ''}`}
-              onClick={() => onSwap(day)}
-              disabled={anySwapping}
-              title="Swap this day's meals"
-            >
-              {isSwapping ? <span className="swap-spinner" aria-hidden="true" /> : '⇄'}
-            </button>
+            userTier === 'pro' ? (
+              <button
+                className={`swap-btn${isSwapping ? ' swap-btn--spinning' : ''}`}
+                onClick={() => onSwap(day)}
+                disabled={anySwapping}
+                title="Swap this day's meals"
+              >
+                {isSwapping ? <span className="swap-spinner" aria-hidden="true" /> : '⇄'}
+              </button>
+            ) : (
+              <button
+                className="swap-btn swap-btn--locked"
+                onClick={onProAction}
+                title="Upgrade to Pro to swap meals"
+              >
+                🔒
+              </button>
+            )
           )}
         </div>
       </div>
@@ -732,20 +847,22 @@ function MealCard({ day, content, isLoading, isSwapping, isSwapped, anySwapping,
           </div>
         ) : (
           <div key={swapKey} className={`meal-sections${isSwapped ? ' meal-sections--new' : ''}`}>
-            {['breakfast', 'lunch', 'dinner'].map(type => (
+            {meals.map(type => (
               <MealSection
                 key={type}
                 type={type}
-                name={meals[type]}
+                name={parsedMeals[type]}
                 day={day}
                 onGetRecipe={onGetRecipe}
                 onSwap={onSwap}
                 anySwapping={anySwapping}
                 isOpen={openDropdown === type}
                 onToggle={() => setOpenDropdown(prev => prev === type ? null : type)}
+                userTier={userTier}
+                onProAction={onProAction}
               />
             ))}
-            {meals.cost && <div className="meal-cost">{meals.cost}</div>}
+            {parsedMeals.cost && <div className="meal-cost">{parsedMeals.cost}</div>}
           </div>
         )}
       </div>
@@ -754,14 +871,14 @@ function MealCard({ day, content, isLoading, isSwapping, isSwapped, anySwapping,
 }
 
 // ── GrocerySection ────────────────────────────────────────────────────────────
-function GrocerySection({ groceryByDay, groceryList, pantryItems, newIngredients }) {
+function GrocerySection({ activeDays, groceryByDay, groceryList, pantryItems, newIngredients, userTier, onProAction }) {
   const [checked, setChecked] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('prepai_grocery_checked') || '[]')) }
+    try { return new Set(JSON.parse(localStorage.getItem('smrtmeals_grocery_checked') || '[]')) }
     catch { return new Set() }
   })
 
   useEffect(() => {
-    localStorage.setItem('prepai_grocery_checked', JSON.stringify([...checked]))
+    localStorage.setItem('smrtmeals_grocery_checked', JSON.stringify([...checked]))
   }, [checked])
 
   if (!groceryList.length) return null
@@ -787,34 +904,8 @@ function GrocerySection({ groceryByDay, groceryList, pantryItems, newIngredients
     })
   }
 
-  function dl(text, filename) {
-    const blob = new Blob([text], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = filename
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  function exportAll() {
-    const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    dl([
-      'MEAL PREP GROCERY LIST', '======================', `Week of: ${dateStr}`, '',
-      ...groceryList.map(i => `${checked.has(i.toLowerCase()) ? '☑' : '☐'}  ${i}${newIngredients.has(i.toLowerCase()) ? '  ← new' : ''}`),
-      '', '─'.repeat(26), 'Generated by Meal Prep Planner',
-    ].join('\n'), 'grocery-list.txt')
-  }
-
-  function exportUnchecked() {
-    const remaining = groceryList.filter(i => !checked.has(i.toLowerCase()))
-    if (!remaining.length) return
-    const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    dl([
-      'STILL NEEDED — GROCERY LIST', '============================', `Week of: ${dateStr}`, '',
-      ...remaining.map(i => `☐  ${i}${newIngredients.has(i.toLowerCase()) ? '  ← new' : ''}`),
-      '', '─'.repeat(26), 'Generated by Meal Prep Planner',
-    ].join('\n'), 'grocery-list-remaining.txt')
-  }
+  const isPro = userTier === 'pro'
+  const FREE_UNLOCKED = DAYS.slice(0, 3) // Monday, Tuesday, Wednesday
 
   function renderChip(item, i) {
     const isChecked = checked.has(item.toLowerCase())
@@ -832,18 +923,20 @@ function GrocerySection({ groceryByDay, groceryList, pantryItems, newIngredients
           checked={isChecked} onChange={() => toggle(item)} />
         <span className="grocery-chip__name">{item}</span>
         {pantry && <span className="grocery-chip__owned" title="In your pantry">✓</span>}
-        <span className="grocery-chip__links">
-          <a href={walmartUrl(search)} target="_blank" rel="noopener noreferrer"
-            className="chip-shop-btn" title="Find on Walmart" aria-label="Find on Walmart"
-            onClick={e => e.stopPropagation()}>
-            {WalmartIcon}
-          </a>
-          <a href={amazonUrl(search)} target="_blank" rel="noopener noreferrer"
-            className="chip-shop-btn" title="Find on Amazon" aria-label="Find on Amazon"
-            onClick={e => e.stopPropagation()}>
-            {AmazonIcon}
-          </a>
-        </span>
+        {isPro && (
+          <span className="grocery-chip__links">
+            <a href={walmartUrl(search)} target="_blank" rel="noopener noreferrer"
+              className="chip-shop-btn" title="Find on Walmart" aria-label="Find on Walmart"
+              onClick={e => e.stopPropagation()}>
+              {WalmartIcon}
+            </a>
+            <a href={amazonUrl(search)} target="_blank" rel="noopener noreferrer"
+              className="chip-shop-btn" title="Find on Amazon" aria-label="Find on Amazon"
+              onClick={e => e.stopPropagation()}>
+              {AmazonIcon}
+            </a>
+          </span>
+        )}
       </label>
     )
   }
@@ -876,8 +969,26 @@ function GrocerySection({ groceryByDay, groceryList, pantryItems, newIngredients
       </div>
 
       <div className="grocery-days">
-        {DAYS.map(day => {
+        {activeDays.map(day => {
           const items = groceryByDay[day]
+          const isLocked = !isPro && !FREE_UNLOCKED.includes(day)
+
+          if (isLocked) {
+            return (
+              <div key={day} className="grocery-day grocery-day--locked">
+                <span className="grocery-day__label">{day}</span>
+                <div className="grocery-day-lock">
+                  <span className="grocery-day-lock__text">
+                    Upgrade to Pro for the full 5-day grocery list 🔒
+                  </span>
+                  <button className="grocery-day-lock__btn" onClick={onProAction}>
+                    Upgrade →
+                  </button>
+                </div>
+              </div>
+            )
+          }
+
           if (!items?.length) return null
           return (
             <div key={day} className="grocery-day">
@@ -896,14 +1007,6 @@ function GrocerySection({ groceryByDay, groceryList, pantryItems, newIngredients
             </div>
           </div>
         )}
-      </div>
-
-      <div className="grocery-exports">
-        <button className="export-btn" onClick={exportAll}>↓ Export all</button>
-        <button className="export-btn export-btn--secondary" onClick={exportUnchecked}
-          disabled={checkedCount === total && total > 0}>
-          ↓ Export unchecked only
-        </button>
       </div>
     </section>
   )
@@ -944,6 +1047,20 @@ export default function App() {
 
   const [showLanding, setShowLanding] = useState(true)
   const [retryStatus, setRetryStatus] = useState('')
+
+  const [step, setStep] = useState(1)
+  const [animDir, setAnimDir] = useState(null)
+  const [animKey, setAnimKey] = useState(0)
+
+  // Step 4 pro options
+  const [mealTypes, setMealTypes] = useState('all')
+  const [customMeals, setCustomMeals] = useState(new Set(['breakfast', 'lunch', 'dinner']))
+  const [planDays, setPlanDays] = useState(5)
+  const [startDay, setStartDay] = useState('Monday')
+
+  // Reflects what was actually generated (set at generate time)
+  const [activeDays, setActiveDays] = useState(DAYS)
+  const [activeMeals, setActiveMeals] = useState(['breakfast', 'lunch', 'dinner'])
 
   // Auth
   const [user, setUser] = useState(null)
@@ -1029,6 +1146,16 @@ export default function App() {
     setScanError('')
     setScannedCount(0)
 
+    setStep(1)
+    setAnimDir(null)
+    setAnimKey(0)
+    setMealTypes('all')
+    setCustomMeals(new Set(['breakfast', 'lunch', 'dinner']))
+    setPlanDays(5)
+    setStartDay('Monday')
+    setActiveDays(DAYS)
+    setActiveMeals(['breakfast', 'lunch', 'dinner'])
+
     // Return to the landing page
     setShowLanding(true)
   }
@@ -1056,6 +1183,18 @@ export default function App() {
     setShowAuthModal(true)
   }
 
+  function handleProAction(msg) {
+    if (user) handleUpgrade()
+    else openAuthModal('signup', msg || 'Create a free account to get started, then upgrade to unlock Pro features.')
+  }
+
+  function goStep(n) {
+    setError('')
+    setAnimDir(n > step ? 'forward' : 'backward')
+    setAnimKey(k => k + 1)
+    setStep(n)
+  }
+
   function handlePresetToggle(preset) {
     setSelectedPresets(prev => {
       const next = new Set(prev)
@@ -1080,6 +1219,11 @@ export default function App() {
   }
 
   async function handlePhotoScan(e) {
+    if (userTier !== 'pro') {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      handleProAction('Pantry scanning is a Pro feature — upgrade to unlock instant ingredient detection from photos.')
+      return
+    }
     const files = Array.from(e.target.files)
     if (!files.length) return
     setScanningPhoto(true); setScanError('')
@@ -1108,6 +1252,7 @@ export default function App() {
   }
 
   async function handleSwap(day) {
+    if (userTier !== 'pro') { handleProAction(); return }
     if (swappingDay || !mealPlan?.[day]) return
     setSwappingDay(day)
     const prompt = `You are swapping one day's meals in a 5-day meal plan.
@@ -1209,8 +1354,8 @@ Mark pantry items with ✓. Keep instructions clear and practical.`
   }
 
   async function handleGenerate() {
-    if (!budget.trim() || !goals.trim()) {
-      setError('Please enter your weekly budget and dietary goals.')
+    if (!budget.trim()) {
+      setError('Please enter your weekly budget.')
       return
     }
     if (!user && freeGenerationsUsed >= 1) {
@@ -1222,65 +1367,39 @@ Mark pantry items with ✓. Keep instructions clear and practical.`
     setSwapKeys({}); setNewIngredients(new Set()); setRecipe(null)
     let succeeded = false
 
+    // promptDays: what Claude actually generates (free = Mon/Tue/Wed only, pro = custom)
+    // displayDays: what renders in the grid (free = all 5 so Thu/Fri lock teaser shows, pro = same as prompt)
+    const isPro        = userTier === 'pro'
+    const promptDays   = isPro ? getActiveDays(planDays, startDay) : DAYS.slice(0, 3)
+    const displayDays  = isPro ? promptDays : DAYS
+    const promptMeals  = isPro ? getMealsList(mealTypes, customMeals) : ['breakfast', 'lunch', 'dinner']
+    setActiveDays(displayDays)
+    setActiveMeals(promptMeals)
+
     const forName = profile.name ? `for ${profile.name} ` : ''
-    const prompt = `You are a professional nutritionist. Create a practical 5-day meal plan (Monday–Friday) ${forName}for:
+
+    function buildDaySection(day) {
+      const mealLines = []
+      if (promptMeals.includes('breakfast')) mealLines.push('Breakfast: [brief meal description]')
+      if (promptMeals.includes('lunch'))     mealLines.push('Lunch: [brief meal description]')
+      if (promptMeals.includes('dinner'))    mealLines.push('Dinner: [brief meal description]')
+      return `**${day.toUpperCase()}**\n${mealLines.join('\n')}\n• Estimated cost: $[amount]`
+    }
+
+    const groceryDaySections = promptDays.map(d => `${d.toUpperCase()}\n• [ingredient]\n• [ingredient]`).join('\n\n')
+
+    const prompt = `You are a professional nutritionist. Create a practical ${promptDays.length}-day meal plan (${promptDays[0]}–${promptDays[promptDays.length - 1]}) ${forName}for:
 
 Weekly Budget: $${budget}
-Dietary Goals: ${goals}
+Dietary Goals: ${goals || 'balanced, healthy eating'}
 Pantry Items: ${pantryItems.length ? pantryItems.join(', ') : 'None specified'}
 
 Respond ONLY in this exact format — no intro or outro:
 
-**MONDAY**
-Breakfast: [brief meal description]
-Lunch: [brief meal description]
-Dinner: [brief meal description]
-• Estimated cost: $[amount]
-
-**TUESDAY**
-Breakfast: [brief meal description]
-Lunch: [brief meal description]
-Dinner: [brief meal description]
-• Estimated cost: $[amount]
-
-**WEDNESDAY**
-Breakfast: [brief meal description]
-Lunch: [brief meal description]
-Dinner: [brief meal description]
-• Estimated cost: $[amount]
-
-**THURSDAY**
-Breakfast: [brief meal description]
-Lunch: [brief meal description]
-Dinner: [brief meal description]
-• Estimated cost: $[amount]
-
-**FRIDAY**
-Breakfast: [brief meal description]
-Lunch: [brief meal description]
-Dinner: [brief meal description]
-• Estimated cost: $[amount]
+${promptDays.map(buildDaySection).join('\n\n')}
 
 **GROCERY LIST**
-MONDAY
-• [ingredient]
-• [ingredient]
-
-TUESDAY
-• [ingredient]
-• [ingredient]
-
-WEDNESDAY
-• [ingredient]
-• [ingredient]
-
-THURSDAY
-• [ingredient]
-• [ingredient]
-
-FRIDAY
-• [ingredient]
-• [ingredient]
+${groceryDaySections}
 
 (List ingredients needed for each specific day. Simple grocery names only — no amounts, no prep notes, no duplicates within a day.)
 
@@ -1290,7 +1409,7 @@ Keep meals practical, budget-friendly, and aligned with the dietary goals. Use p
       await withRetry(
         async () => {
           let fullText = ''
-          const plan = Object.fromEntries(DAYS.map(d => [d, '']))
+          const plan = Object.fromEntries(promptDays.map(d => [d, '']))
           const stream = await client.messages.stream({
             model: 'claude-opus-4-7', max_tokens: 4096,
             thinking: { type: 'adaptive' },
@@ -1299,12 +1418,12 @@ Keep meals practical, budget-friendly, and aligned with the dietary goals. Use p
           for await (const chunk of stream) {
             if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
               fullText += chunk.delta.text
-              for (let i = 0; i < DAYS.length; i++) {
-                const day = DAYS[i]
+              for (let i = 0; i < promptDays.length; i++) {
+                const day = promptDays[i]
                 const marker = `**${day.toUpperCase()}**`
                 const start = fullText.indexOf(marker)
                 if (start === -1) continue
-                const nextMarker = DAYS[i + 1] ? `**${DAYS[i + 1].toUpperCase()}**` : '**GROCERY LIST**'
+                const nextMarker = promptDays[i + 1] ? `**${promptDays[i + 1].toUpperCase()}**` : '**GROCERY LIST**'
                 const end = fullText.indexOf(nextMarker, start + marker.length)
                 plan[day] = fullText.slice(start + marker.length, end === -1 ? fullText.length : end).trim()
                 setActiveDay(i)
@@ -1320,7 +1439,7 @@ Keep meals practical, budget-friendly, and aligned with the dietary goals. Use p
                 for (const rawLine of gSection.split('\n')) {
                   const line = rawLine.trim()
                   if (!line || line.startsWith('(')) continue
-                  const matchedDay = DAYS.find(d => line.toUpperCase() === d.toUpperCase())
+                  const matchedDay = promptDays.find(d => line.toUpperCase() === d.toUpperCase())
                   if (matchedDay) {
                     currentDay = matchedDay
                     if (!byDay[matchedDay]) byDay[matchedDay] = []
@@ -1378,8 +1497,8 @@ Keep meals practical, budget-friendly, and aligned with the dietary goals. Use p
           <div className="app-header__brand">
             <div className="app-header__icon">🥗</div>
             <div>
-              <h1 className="app-header__title">Meal Prep Planner</h1>
-              <p className="app-header__subtitle">AI-powered weekly meal plans tailored to your budget &amp; goals</p>
+              <h1 className="app-header__title">SMRT Meals</h1>
+              <p className="app-header__subtitle">Eat smart. Spend smart. Live smart.</p>
             </div>
           </div>
           <div className="app-header__right" style={{ position: 'relative' }}>
@@ -1422,128 +1541,319 @@ Keep meals practical, budget-friendly, and aligned with the dietary goals. Use p
         )}
 
         <section className="form-section">
-          <div className="form-card">
-            <div className="form-group">
-              <label htmlFor="budget"><span className="label-icon">💰</span> Weekly Budget</label>
-              <div className="input-wrap input-wrap--prefix">
-                <span className="input-prefix">$</span>
-                <input id="budget" type="number" min="1" placeholder="75"
-                  value={budget} onChange={e => setBudget(e.target.value)} disabled={loading} />
-              </div>
-            </div>
+          <div className="step-flow">
 
-            <div className="presets-group">
-              <p className="presets-label">Quick picks</p>
-              <div className="presets-grid">
-                {DIETARY_PRESETS.map(preset => (
-                  <button key={preset.id} type="button"
-                    className={`preset-card${selectedPresets.has(preset.id) ? ' preset-card--selected' : ''}`}
-                    onClick={() => handlePresetToggle(preset)}
+            {step === 1 && (
+              <div className={`step-card${animDir ? ` step-card--${animDir}` : ''}`} key={animKey}>
+                <div className="step-progress">
+                  <div className="step-track">
+                    <div className="step-seg step-seg--active" />
+                    <div className="step-seg" />
+                    <div className="step-seg" />
+                    <div className="step-seg" />
+                  </div>
+                  <span className="step-label">Step 1 of 4</span>
+                </div>
+                <h2 className="step-heading">What's your weekly budget?</h2>
+                <p className="step-subheading">We'll build a meal plan that fits your spending.</p>
+                <div className="step-budget-wrap">
+                  <span className="step-budget-prefix">$</span>
+                  <input
+                    className="step-budget-input"
+                    type="number" min="1" placeholder="75"
+                    value={budget}
+                    onChange={e => setBudget(e.target.value)}
+                    disabled={loading}
+                    autoFocus
+                  />
+                </div>
+                <div className="step-nav">
+                  <button className="step-next-btn" onClick={() => goStep(2)} disabled={!budget.trim() || loading}>
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className={`step-card${animDir ? ` step-card--${animDir}` : ''}`} key={animKey}>
+                <div className="step-progress">
+                  <div className="step-track">
+                    <div className="step-seg step-seg--done" />
+                    <div className="step-seg step-seg--active" />
+                    <div className="step-seg" />
+                    <div className="step-seg" />
+                  </div>
+                  <span className="step-label">Step 2 of 4</span>
+                </div>
+                <h2 className="step-heading">What are your dietary goals?</h2>
+                <p className="step-subheading">Pick any that apply, or describe your own below.</p>
+                <div className="presets-grid">
+                  {DIETARY_PRESETS.map(preset => (
+                    <button key={preset.id} type="button"
+                      className={`preset-card${selectedPresets.has(preset.id) ? ' preset-card--selected' : ''}`}
+                      onClick={() => handlePresetToggle(preset)}
+                      disabled={loading}
+                    >
+                      <span className="preset-card__icon">{preset.icon}</span>
+                      <span className="preset-card__label">{preset.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <input
+                  className="step-goals-input"
+                  type="text"
+                  placeholder="Or describe your goals… e.g. high protein, low carb, gluten-free"
+                  value={goals}
+                  onChange={e => setGoals(e.target.value)}
+                  disabled={loading}
+                />
+                <div className="step-nav">
+                  <button className="step-back-btn" onClick={() => goStep(1)} disabled={loading}>← Back</button>
+                  <button className="step-next-btn" onClick={() => goStep(3)} disabled={loading}>Next →</button>
+                </div>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className={`step-card${animDir ? ` step-card--${animDir}` : ''}`} key={animKey}>
+                <div className="step-progress">
+                  <div className="step-track">
+                    <div className="step-seg step-seg--done" />
+                    <div className="step-seg step-seg--done" />
+                    <div className="step-seg step-seg--active" />
+                    <div className="step-seg" />
+                  </div>
+                  <span className="step-label">Step 3 of 4</span>
+                </div>
+                <h2 className="step-heading">What's in your pantry?</h2>
+                <p className="step-subheading">Optional — we'll work around what you already have.</p>
+
+                {userTier === 'pro' ? (
+                  <button type="button"
+                    className={`scan-btn-full${scanningPhoto ? ' scan-btn-full--loading' : ''}`}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={scanningPhoto || loading}
+                  >
+                    {scanningPhoto
+                      ? <><span className="scan-spinner" aria-hidden="true" /> Scanning photo…</>
+                      : <><span className="scan-btn-full__icon">📷</span> Scan Your Pantry</>}
+                  </button>
+                ) : (
+                  <button type="button"
+                    className="scan-btn-full scan-btn-full--locked"
+                    onClick={() => handleProAction('Pantry scanning is a Pro feature — upgrade to unlock instant ingredient detection from photos.')}
                     disabled={loading}
                   >
-                    <span className="preset-card__icon">{preset.icon}</span>
-                    <span className="preset-card__label">{preset.label}</span>
+                    <span className="scan-btn-full__icon">🔒</span> Scan Your Pantry · Pro
                   </button>
-                ))}
+                )}
+
+                {scanError && <p className="scan-error">{scanError}</p>}
+
+                <div className="step-or-divider">or type your ingredients</div>
+
+                {pantryItems.length > 0 && (
+                  <ul className="pantry-list">
+                    {pantryItems.map((item, i) => (
+                      <li key={i} className="pantry-item">
+                        <span className="pantry-item__check">✓</span>
+                        <span className="pantry-item__name">{item}</span>
+                        <button type="button" className="pantry-item__remove"
+                          onClick={() => handleRemoveItem(i)} aria-label={`Remove ${item}`}>✕</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <form className="pantry-add-row" onSubmit={handleAddItem}>
+                  <input type="text" className="pantry-add-input"
+                    placeholder="Add an ingredient…"
+                    value={addItemInput}
+                    onChange={e => setAddItemInput(e.target.value)}
+                    disabled={loading} />
+                  <button type="submit" className="pantry-add-btn"
+                    disabled={!addItemInput.trim() || loading}>+</button>
+                </form>
+
+                <input ref={fileInputRef} type="file" accept="image/*" multiple
+                  style={{ display: 'none' }} onChange={handlePhotoScan} />
+
+                {error && <p className="error-banner">{error}</p>}
+
+                <div className="step-nav">
+                  <button className="step-back-btn" onClick={() => goStep(2)} disabled={loading}>← Back</button>
+                  <button className="step-next-btn" onClick={() => goStep(4)} disabled={loading}>Next →</button>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="form-group">
-              <label htmlFor="goals"><span className="label-icon">🎯</span> Dietary Goals</label>
-              <input id="goals" type="text"
-                placeholder="e.g. high protein, low carb, vegetarian, weight loss…"
-                value={goals} onChange={e => setGoals(e.target.value)} disabled={loading} />
-            </div>
+            {step === 4 && (
+              <div className={`step-card${animDir ? ` step-card--${animDir}` : ''}`} key={animKey}>
+                <div className="step-progress">
+                  <div className="step-track">
+                    <div className="step-seg step-seg--done" />
+                    <div className="step-seg step-seg--done" />
+                    <div className="step-seg step-seg--done" />
+                    <div className="step-seg step-seg--active" />
+                  </div>
+                  <span className="step-label">Step 4 of 4</span>
+                </div>
+                <h2 className="step-heading">Customize your plan</h2>
+                <p className="step-subheading">Fine-tune which meals and days to include.</p>
 
-            <div className="form-group">
-              <label><span className="label-icon">🧺</span> Pantry Items <span className="label-optional">(optional)</span></label>
+                <div className={`step4-options${userTier !== 'pro' ? ' step4-options--locked' : ''}`}>
+                  {userTier !== 'pro' && (
+                    <div className="step4-lock-overlay">
+                      <span className="step4-lock-icon">🔒</span>
+                      <p className="step4-lock-msg">Pro feature — Upgrade to unlock full plan customization</p>
+                      <button className="step4-lock-btn"
+                        onClick={() => user ? handleUpgrade() : openAuthModal('signup', 'Create a free account, then upgrade to Pro for full plan customization.')}>
+                        Upgrade to Pro →
+                      </button>
+                    </div>
+                  )}
 
-              <button type="button"
-                className={`scan-btn-full${scanningPhoto ? ' scan-btn-full--loading' : ''}`}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={scanningPhoto || loading}
-              >
-                {scanningPhoto
-                  ? <><span className="scan-spinner" aria-hidden="true" /> Scanning photo…</>
-                  : <><span className="scan-btn-full__icon">📷</span> Scan Your Pantry</>}
-              </button>
+                  <div className="step4-body">
+                    <div className="step-option-group">
+                      <p className="step-option-label">Which meals?</p>
+                      <div className="option-grid">
+                        {[
+                          { id: 'all',       label: 'All meals'  },
+                          { id: 'breakfast', label: 'Breakfast'  },
+                          { id: 'lunch',     label: 'Lunch'      },
+                          { id: 'dinner',    label: 'Dinner'     },
+                          { id: 'custom',    label: 'Custom'     },
+                        ].map(opt => (
+                          <button key={opt.id}
+                            className={`option-pill${mealTypes === opt.id ? ' option-pill--selected' : ''}`}
+                            onClick={() => setMealTypes(opt.id)}
+                            disabled={userTier !== 'pro'}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                      {mealTypes === 'custom' && (
+                        <div className="custom-meals-row">
+                          {['breakfast', 'lunch', 'dinner'].map(meal => (
+                            <label key={meal} className={`custom-meal-check${customMeals.has(meal) ? ' custom-meal-check--on' : ''}`}>
+                              <input type="checkbox"
+                                checked={customMeals.has(meal)}
+                                onChange={() => setCustomMeals(prev => {
+                                  const next = new Set(prev)
+                                  if (next.has(meal)) { if (next.size > 1) next.delete(meal) }
+                                  else next.add(meal)
+                                  return next
+                                })}
+                                disabled={userTier !== 'pro'}
+                              />
+                              {meal.charAt(0).toUpperCase() + meal.slice(1)}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
-              {scanError && <p className="scan-error">{scanError}</p>}
+                    <div className="step-option-group">
+                      <p className="step-option-label">How many days?</p>
+                      <div className="option-grid option-grid--days">
+                        {[3, 5, 7].map(n => (
+                          <button key={n}
+                            className={`option-pill${planDays === n ? ' option-pill--selected' : ''}`}
+                            onClick={() => setPlanDays(n)}
+                            disabled={userTier !== 'pro'}
+                          >
+                            {n} days
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-              {pantryItems.length > 0 && (
-                <ul className="pantry-list">
-                  {pantryItems.map((item, i) => (
-                    <li key={i} className="pantry-item">
-                      <span className="pantry-item__check">✓</span>
-                      <span className="pantry-item__name">{item}</span>
-                      <button type="button" className="pantry-item__remove"
-                        onClick={() => handleRemoveItem(i)} aria-label={`Remove ${item}`}>✕</button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                    <div className="step-option-group">
+                      <p className="step-option-label">Starting day?</p>
+                      <div className="option-grid option-grid--week">
+                        {ALL_WEEK_DAYS.map(day => (
+                          <button key={day}
+                            className={`option-pill option-pill--sm${startDay === day ? ' option-pill--selected' : ''}`}
+                            onClick={() => setStartDay(day)}
+                            disabled={userTier !== 'pro'}
+                          >
+                            {day.slice(0, 3)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-              <form className="pantry-add-row" onSubmit={handleAddItem}>
-                <input type="text" className="pantry-add-input"
-                  placeholder="Add an ingredient…"
-                  value={addItemInput}
-                  onChange={e => setAddItemInput(e.target.value)}
-                  disabled={loading} />
-                <button type="submit" className="pantry-add-btn"
-                  disabled={!addItemInput.trim() || loading}>+</button>
-              </form>
+                {error && <p className="error-banner" style={{ marginTop: 16 }}>{error}</p>}
 
-              <input ref={fileInputRef} type="file" accept="image/*" multiple
-                style={{ display: 'none' }} onChange={handlePhotoScan} />
+                <div className="step-nav">
+                  <button className="step-back-btn" onClick={() => goStep(3)} disabled={loading}>← Back</button>
+                  <button className="step-next-btn" onClick={handleGenerate} disabled={loading}>
+                    {loading
+                      ? <><span className="spinner" aria-hidden="true" /> {retryStatus || 'Generating…'}</>
+                      : '✨ Generate My Plan'}
+                  </button>
+                </div>
+              </div>
+            )}
 
-              {pantryItems.length > 0 && (
-                <button type="button" className="pantry-generate-btn"
-                  onClick={handleGenerate} disabled={loading}>
-                  {loading
-                    ? <><span className="spinner" aria-hidden="true" /> {retryStatus || 'Generating…'}</>
-                    : '✓ Looks good, generate plan'}
-                </button>
-              )}
-            </div>
-            {error && <p className="error-banner">{error}</p>}
-            <button className={`generate-btn${loading ? ' generate-btn--loading' : ''}`}
-              onClick={handleGenerate} disabled={loading}>
-              {loading
-                ? <><span className="spinner" aria-hidden="true" /> {retryStatus || 'Generating meal plan…'}</>
-                : '✨ Generate 5-Day Meal Plan'}
-            </button>
           </div>
         </section>
 
         {(hasResults || loading) && (
           <section className="results-section">
-            <h2 className="results-title">Your 5-Day Meal Plan</h2>
+            <h2 className="results-title">Your {activeDays.length}-Day Meal Plan</h2>
             <div className="cards-grid">
-              {DAYS.map((day, i) => (
-                <MealCard
-                  key={day}
-                  day={day}
-                  content={mealPlan?.[day] || undefined}
-                  isLoading={loading && i <= activeDay && !mealPlan?.[day]}
-                  isSwapping={swappingDay === day}
-                  isSwapped={swappedDays.has(day)}
-                  anySwapping={!!swappingDay}
-                  swapKey={swapKeys[day] ?? 0}
-                  onSwap={handleSwap}
-                  onUndo={handleUndo}
-                  onGetRecipe={handleGetRecipe}
-                />
-              ))}
+              {activeDays.map((day, i) => {
+                const isLocked = userTier !== 'pro' && !DAYS.slice(0, 3).includes(day)
+                return (
+                  <div key={day} className={`day-wrapper${isLocked ? ' day-wrapper--locked' : ''}`}>
+                    <MealCard
+                      day={day}
+                      content={mealPlan?.[day] || undefined}
+                      isLoading={loading && i <= activeDay && !mealPlan?.[day]}
+                      isSwapping={swappingDay === day}
+                      isSwapped={swappedDays.has(day)}
+                      anySwapping={!!swappingDay}
+                      swapKey={swapKeys[day] ?? 0}
+                      onSwap={handleSwap}
+                      onUndo={handleUndo}
+                      onGetRecipe={handleGetRecipe}
+                      meals={activeMeals}
+                      userTier={userTier}
+                      onProAction={handleProAction}
+                    />
+                    {isLocked && (
+                      <div className="day-lock-overlay">
+                        <span className="day-lock-overlay__icon">🔒</span>
+                        <p className="day-lock-overlay__msg">Upgrade to Pro for the full 5-day plan</p>
+                        <button
+                          className="day-lock-overlay__btn"
+                          onClick={() => user ? handleUpgrade() : openAuthModal('signup', 'Create a free account to unlock the full 5-day meal plan.')}
+                        >
+                          Upgrade to Pro
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </section>
         )}
 
         {!loading && groceryList.length > 0 && (
           <GrocerySection
+            activeDays={activeDays}
             groceryByDay={groceryByDay}
             groceryList={groceryList}
             pantryItems={pantryItems}
             newIngredients={newIngredients}
+            userTier={userTier}
+            onProAction={handleProAction}
           />
         )}
       </main>

@@ -38,12 +38,12 @@ export default function SuccessPage() {
       <div className="success-card">
         <div className="success-card__icon">{status === 'upgrading' ? '⏳' : '🎉'}</div>
         <h1 className="success-card__title">
-          {status === 'upgrading' ? 'Activating your plan…' : 'Welcome to Pro!'}
+          {status === 'upgrading' ? 'Activating your plan…' : 'Welcome to SMRT Meals Pro!'}
         </h1>
         <p className="success-card__subtitle">
           {status === 'upgrading'
             ? 'Just a moment while we activate your account.'
-            : 'Your account has been upgraded. All premium features are now unlocked.'}
+            : 'Your account has been upgraded. All Pro features are now unlocked.'}
         </p>
 
         {status === 'done' && (
